@@ -4,3 +4,4 @@ checkponints
 *.csv
 *.tsv
 __pycache__
+models

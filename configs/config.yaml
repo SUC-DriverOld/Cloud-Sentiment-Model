@@ -1,25 +1,29 @@
-exp_dir: "checkpoints"
-exp_name: "test_model"
+exp_dir: "models"
+exp_name: "my_model"
 seed: 114514
+
+preprocess:
+  batch_size: 6
+  num_workers: 4
+  padding: "max_length"
+  truncation: true
+  max_length: 256
+  return_tensors: "pt"
 
 data:
   path: "datasets"
   val_size: 0.1
   train_ratio: 1.0
-  padding: "max_length"
-  truncation: true
-  max_length: 256
-  return_tensors: "pt"
-  num_workers: 2
+  num_workers: 4
   pin_memory: false
   persistent_workers: true
 
 train:
-  devices: "auto"
-  batch_size: 4
+  devices: [0]
+  batch_size: 64
   lr: 1e-4
   weight_decay: 0.01
-  max_epochs: 20
+  max_epochs: 1000
   gamma: 2
   monitor: "val_acc"
   save_name: "{epoch}_{val_acc:.2f}"

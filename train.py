@@ -1,7 +1,5 @@
 import os
 import torch
-import pandas as pd
-import numpy as np
 import argparse
 from omegaconf import OmegaConf
 from pytorch_lightning import Trainer, LightningModule, seed_everything
@@ -9,70 +7,53 @@ from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.strategies.ddp import DDPStrategy
 from torch.utils.data import Dataset, DataLoader
-from transformers import BertTokenizer, BertModel
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from model import CloudSentimentModel, FocalLoss
+from preprocess import extract_bert_features
 
 
-class TextDataset(Dataset):
-    def __init__(self, config, texts, labels, tokenizer):
-        self.texts = texts
+class FeatureDataset(Dataset):
+    def __init__(self, features, labels):
+        self.features = features
         self.labels = labels
-        self.tokenizer = tokenizer
-        self.padding = config.data.padding
-        self.truncation = config.data.truncation
-        self.max_length = config.data.max_length
-        self.return_tensors = config.data.return_tensors
 
     def __len__(self):
-        return len(self.texts)
+        return len(self.features)
 
     def __getitem__(self, idx):
-        encoded = self.tokenizer(
-            self.texts[idx],
-            padding=self.padding,
-            truncation=self.truncation,
-            max_length=self.max_length,
-            return_tensors=self.return_tensors
-        )
-        for k in encoded:
-            encoded[k] = encoded[k].squeeze(0)
-        return encoded, torch.tensor(self.labels[idx], dtype=torch.long)
+        return self.features[idx], self.labels[idx]
 
 
 class CloudSentimentModelLightning(LightningModule):
     def __init__(self, model: CloudSentimentModel, lr=1e-4, decay=0.01, gamma=2):
         super(CloudSentimentModelLightning, self).__init__()
-        self.strict_loading=False
-        self.model=model
-        self.lr=lr
-        self.decay=decay
-        self.loss_fn=FocalLoss(gamma=gamma)
+        self.strict_loading = False
+        self.model = model
+        self.lr = lr
+        self.decay = decay
+        self.loss_fn = FocalLoss(gamma=gamma)
 
-    def forward(self, input_ids, attention_mask):
-        return self.model(input_ids, attention_mask)
+    def forward(self, features):
+        return self.model(features)
 
     def training_step(self, batch, batch_idx):
-        encoded, labels = batch
-        logits, _, _, _ = self(encoded["input_ids"].to(self.device), encoded["attention_mask"].to(self.device))
-        loss = self.loss_fn(logits, labels.to(self.device))
+        features, labels = batch
+        logits, _, _, _ = self(features)
+        loss = self.loss_fn(logits, labels)
+        self.log("train_loss", loss, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        encoded, labels = batch
-        logits, _, _, _ = self(encoded["input_ids"].to(self.device), encoded["attention_mask"].to(self.device))
+        features, labels = batch
+        logits, _, _, _ = self(features)
+        loss = self.loss_fn(logits, labels)
         preds = torch.argmax(logits, dim=1)
         acc = accuracy_score(labels.cpu(), preds.cpu())
+        self.log("val_loss", loss, prog_bar=True, logger=True, rank_zero_only=True)
         self.log("val_acc", acc, prog_bar=True, logger=True, rank_zero_only=True)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.decay)
-
-    def get_progress_bar_dict(self):
-        tqdm_dict = super().get_progress_bar_dict()
-        tqdm_dict.pop("v_num", None)
-        return tqdm_dict
 
 
 class CustomModelCheckpoint(ModelCheckpoint):
@@ -81,8 +62,6 @@ class CustomModelCheckpoint(ModelCheckpoint):
         self.config = config
 
     def on_save_checkpoint(self, trainer, pl_module, checkpoint):
-        non_bert_state_dict = {k: v for k, v in pl_module.state_dict().items() if "bert" not in k}
-        checkpoint["state_dict"] = non_bert_state_dict
         checkpoint["config"] = config
         super().on_save_checkpoint(trainer, pl_module, checkpoint)
 
@@ -97,34 +76,31 @@ class LitProgressBar(TQDMProgressBar):
 def train(config, model_path=None):
     seed_everything(config.seed, workers=True)
 
-    texts, labels = list(), list()
-    for file in os.listdir(config.data.path):
-        if file.endswith(".tsv"):
-            data = pd.read_csv(os.path.join(config.data.path, file), sep="\t")
-            texts.extend(data["text"].tolist())
-            labels.extend(data["label"].tolist())
-        elif file.endswith(".csv"):
-            data = pd.read_csv(os.path.join(config.data.path, file))
-            texts.extend(data["text"].tolist())
-            labels.extend(data["label"].tolist())
-        else:
-            print(f"[WARNING] Unsupported file format: {file}")
+    train_features_path = os.path.join(config.exp_dir, config.exp_name, "train_features.pt")
+    val_features_path = os.path.join(config.exp_dir, config.exp_name, "val_features.pt")
+    features_info_path = os.path.join(config.exp_dir, config.exp_name, "features_info.pt")
 
-    if config.data.train_ratio < 1.0:
-        combined = list(zip(texts, labels))
-        random_state = np.random.RandomState(config.seed)
-        random_state.shuffle(combined)
-        num_samples = int(len(combined) * config.data.train_ratio)
-        combined = combined[:num_samples]
-        texts, labels = zip(*combined)
-        texts, labels = list(texts), list(labels)
+    if (not os.path.exists(train_features_path) or not os.path.exists(val_features_path)
+        or not os.path.exists(features_info_path)):
+        extract_bert_features(config)
+    else:
+        print(f"Loading old features from {os.path.join(config.exp_dir, config.exp_name)}")
 
-    tokenizer = BertTokenizer.from_pretrained("pretrain/chinese-roberta-wwm-ext-large")
-    bert_model = BertModel.from_pretrained("pretrain/chinese-roberta-wwm-ext-large")
-    X_train, X_val, y_train, y_val = train_test_split(texts, labels, test_size=config.data.val_size, random_state=config.seed)
+    train_data = torch.load(train_features_path)
+    val_data = torch.load(val_features_path)
+    feature_info = torch.load(features_info_path)
+    print(f"Feature info: {feature_info}")
 
-    train_ds = TextDataset(config, X_train, y_train, tokenizer)
-    val_ds = TextDataset(config, X_val, y_val, tokenizer)
+    train_features = train_data["features"]
+    train_labels = train_data["labels"]
+    val_features = val_data["features"]
+    val_labels = val_data["labels"]
+    hidden_size = feature_info["hidden_size"]
+    config.model.hidden_size = hidden_size # 把BERT的hidden_size保存到配置文件中
+
+    # 创建数据集和加载器
+    train_ds = FeatureDataset(train_features, train_labels)
+    val_ds = FeatureDataset(val_features, val_labels)
 
     train_loader = DataLoader(
         train_ds,
@@ -132,7 +108,7 @@ def train(config, model_path=None):
         shuffle=True,
         num_workers=config.data.num_workers,
         pin_memory=config.data.pin_memory,
-        persistent_workers=config.data.persistent_workers
+        persistent_workers=config.data.persistent_workers if config.data.num_workers > 0 else False
     )
 
     val_loader = DataLoader(
@@ -141,11 +117,11 @@ def train(config, model_path=None):
         shuffle=False,
         num_workers=config.data.num_workers,
         pin_memory=config.data.pin_memory,
-        persistent_workers=config.data.persistent_workers
+        persistent_workers=config.data.persistent_workers if config.data.num_workers > 0 else False
     )
 
     model = CloudSentimentModel(
-        bert_model,
+        input_size=hidden_size,
         cloud_drop_num=config.model.cloud_drop_num,
         features=config.model.features,
         dropout=config.model.dropout
@@ -161,7 +137,7 @@ def train(config, model_path=None):
     checkpoint_callback = CustomModelCheckpoint(
         config=config,
         monitor=config.train.monitor,
-        dirpath=os.path.join(config.exp_dir, config.exp_name),
+        dirpath=os.path.join(config.exp_dir, config.exp_name, "checkpoints"),
         filename=config.train.save_name,
         save_top_k=config.train.save_top_k,
         mode=config.train.mode,
@@ -169,10 +145,17 @@ def train(config, model_path=None):
         verbose=config.train.verbose,
     )
 
+    strategy = "auto"
+    if len(config.train.devices) > 1:
+        strategy = DDPStrategy(
+            find_unused_parameters=True, 
+            process_group_backend='gloo' if os.name == "nt" else 'nccl'
+        )
+
     trainer = Trainer(
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         devices=config.train.devices,
-        strategy=DDPStrategy(find_unused_parameters=True, process_group_backend='gloo' if os.name == "nt" else 'nccl'),
+        strategy=strategy,
         max_epochs=config.train.max_epochs,
         logger=TensorBoardLogger(name="logs", save_dir=os.path.join(config.exp_dir, config.exp_name)),
         log_every_n_steps=config.train.log_every_n_steps,
@@ -187,7 +170,7 @@ def train(config, model_path=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default="configs/config.yaml", help="Path to the config file")
-    parser.add_argument("-m", "--model", type=str, default=None, help="Path to the checkpoint model for resuming training")
+    parser.add_argument("-m", "--model", type=str, default=None, help="Path to the model checkpoint file to resume training")
     args = parser.parse_args()
 
     os.environ["USE_LIBUV"] = "0"
