@@ -1,0 +1,37 @@
+exp_dir: "checkpoints"
+exp_name: "test_model"
+seed: 114514
+
+data:
+  path: "datasets"
+  val_size: 0.1
+  train_ratio: 1.0
+  padding: "max_length"
+  truncation: true
+  max_length: 256
+  return_tensors: "pt"
+  num_workers: 2
+  pin_memory: false
+  persistent_workers: true
+
+train:
+  devices: "auto"
+  batch_size: 4
+  lr: 1e-4
+  weight_decay: 0.01
+  max_epochs: 20
+  gamma: 2
+  monitor: "val_acc"
+  save_name: "{epoch}_{val_acc:.2f}"
+  save_top_k: 1
+  mode: "max"
+  save_last: true
+  verbose: true
+  log_every_n_steps: 10
+
+model:
+  cloud_drop_num: 512
+  features:
+  - 128
+  - 64
+  dropout: 0.3
