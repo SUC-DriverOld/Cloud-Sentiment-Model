@@ -7,9 +7,13 @@ from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.strategies.ddp import DDPStrategy
 from torch.utils.data import Dataset, DataLoader
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import ExponentialLR
 from sklearn.metrics import accuracy_score
 from model import CloudSentimentModel, FocalLoss
 from preprocess import extract_bert_features
+
+torch.set_float32_matmul_precision("high")
 
 
 class FeatureDataset(Dataset):
@@ -25,12 +29,13 @@ class FeatureDataset(Dataset):
 
 
 class CloudSentimentModelLightning(LightningModule):
-    def __init__(self, model: CloudSentimentModel, lr=1e-4, decay=0.01, gamma=2):
+    def __init__(self, model: CloudSentimentModel, lr=1e-4, weight_decay=0.01, lr_decay=0.95, gamma=2):
         super(CloudSentimentModelLightning, self).__init__()
         self.strict_loading = False
         self.model = model
         self.lr = lr
-        self.decay = decay
+        self.weight_decay = weight_decay
+        self.lr_decay = lr_decay
         self.loss_fn = FocalLoss(gamma=gamma)
 
     def forward(self, features):
@@ -41,6 +46,8 @@ class CloudSentimentModelLightning(LightningModule):
         logits, _, _, _ = self(features)
         loss = self.loss_fn(logits, labels)
         self.log("train_loss", loss, prog_bar=True, logger=True)
+        current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
+        self.log("lr", current_lr, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -53,7 +60,9 @@ class CloudSentimentModelLightning(LightningModule):
         self.log("val_acc", acc, prog_bar=True, logger=True, rank_zero_only=True)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.decay)
+        optimizer = AdamW(self.parameters(),lr=self.lr,weight_decay=self.weight_decay)
+        scheduler = ExponentialLR(optimizer, gamma=self.lr_decay)
+        return {"optimizer": optimizer,"lr_scheduler": {"scheduler": scheduler,"interval": "epoch","frequency": 1}}
 
 
 class CustomModelCheckpoint(ModelCheckpoint):
@@ -130,7 +139,8 @@ def train(config, model_path=None):
     lightning_model = CloudSentimentModelLightning(
         model,
         lr=config.train.lr,
-        decay=config.train.weight_decay,
+        weight_decay=config.train.weight_decay,
+        lr_decay=config.train.lr_decay,
         gamma=config.train.gamma
     )
 
@@ -145,6 +155,12 @@ def train(config, model_path=None):
         verbose=config.train.verbose,
     )
 
+    logger = TensorBoardLogger(
+        name="logs",
+        save_dir=os.path.join(config.exp_dir, config.exp_name),
+        version=config.exp_name,
+    )
+
     strategy = "auto"
     if len(config.train.devices) > 1:
         strategy = DDPStrategy(
@@ -157,7 +173,7 @@ def train(config, model_path=None):
         devices=config.train.devices,
         strategy=strategy,
         max_epochs=config.train.max_epochs,
-        logger=TensorBoardLogger(name="logs", save_dir=os.path.join(config.exp_dir, config.exp_name)),
+        logger=logger,
         log_every_n_steps=config.train.log_every_n_steps,
         callbacks=[checkpoint_callback, LitProgressBar()],
         default_root_dir=os.path.join(config.exp_dir, config.exp_name),

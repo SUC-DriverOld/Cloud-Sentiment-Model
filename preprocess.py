@@ -65,8 +65,7 @@ def extract_bert_features(config):
     print("Loading tokenizer and bert model...")
 
     # 加载BERT tokenizer和模型
-    assert (os.path.exists("pretrain/chinese-roberta-wwm-ext-large/pytorch_model.bin"),
-            "Please download the pre-trained model first.")
+    assert os.path.exists("pretrain/chinese-roberta-wwm-ext-large/pytorch_model.bin"), "Please download the pre-trained model first."
 
     tokenizer = BertTokenizer.from_pretrained("pretrain/chinese-roberta-wwm-ext-large")
     bert_model = BertModel.from_pretrained("pretrain/chinese-roberta-wwm-ext-large")
@@ -97,12 +96,19 @@ def extract_bert_features(config):
     os.makedirs(output_dir, exist_ok=True)
 
     train_features = []
+    val_features = []
     with torch.no_grad():
         for batch, _ in tqdm(train_loader, desc="Extracting train features"):
             input_ids = batch["input_ids"].cuda()
             attention_mask = batch["attention_mask"].cuda()
             outputs = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]
             train_features.append(outputs.cpu())
+
+        for batch, _ in tqdm(val_loader, desc="Extracting val features"):
+            input_ids = batch["input_ids"].cuda()
+            attention_mask = batch["attention_mask"].cuda()
+            outputs = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]
+            val_features.append(outputs.cpu())
 
     train_features = torch.cat(train_features, dim=0)
     torch.save({
@@ -112,14 +118,6 @@ def extract_bert_features(config):
 
     print(f"Saving train features to: {os.path.join(output_dir, 'train_features.pt')}")
 
-    val_features = []
-    with torch.no_grad():
-        for batch, _ in tqdm(val_loader, desc="Extracting val features"):
-            input_ids = batch["input_ids"].cuda()
-            attention_mask = batch["attention_mask"].cuda()
-            outputs = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]
-            val_features.append(outputs.cpu())
-    
     val_features = torch.cat(val_features, dim=0)
     torch.save({
         "features": val_features,

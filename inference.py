@@ -35,8 +35,7 @@ def load_models(model_path) -> tuple:
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     print("Loading tokenizer and model...")
-    assert (os.path.exists("pretrain/chinese-roberta-wwm-ext-large/pytorch_model.bin"),
-            "Please download the pre-trained model first.")
+    assert os.path.exists("pretrain/chinese-roberta-wwm-ext-large/pytorch_model.bin"), "Please download the pre-trained model first."
 
     tokenizer = BertTokenizer.from_pretrained("pretrain/chinese-roberta-wwm-ext-large")
     bert_model = BertModel.from_pretrained("pretrain/chinese-roberta-wwm-ext-large")
