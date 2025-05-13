@@ -3,7 +3,7 @@ import torch
 import argparse
 from omegaconf import OmegaConf
 from pytorch_lightning import Trainer, LightningModule, seed_everything
-from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
+from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar, EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.strategies.ddp import DDPStrategy
 from torch.utils.data import Dataset, DataLoader
@@ -155,6 +155,13 @@ def train(config, model_path=None):
         verbose=config.train.verbose,
     )
 
+    early_stopping_callback = EarlyStopping(
+        monitor=config.train.monitor,
+        patience=config.train.patience,
+        verbose=config.train.verbose,
+        mode=config.train.mode
+    )
+
     logger = TensorBoardLogger(
         name="logs",
         save_dir=os.path.join(config.exp_dir, config.exp_name),
@@ -175,7 +182,7 @@ def train(config, model_path=None):
         max_epochs=config.train.max_epochs,
         logger=logger,
         log_every_n_steps=config.train.log_every_n_steps,
-        callbacks=[checkpoint_callback, LitProgressBar()],
+        callbacks=[checkpoint_callback, early_stopping_callback, LitProgressBar()],
         default_root_dir=os.path.join(config.exp_dir, config.exp_name),
     )
 

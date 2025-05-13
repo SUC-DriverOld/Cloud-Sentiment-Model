@@ -5,3 +5,4 @@ checkponints
 *.tsv
 __pycache__
 models
+configs/test.yaml

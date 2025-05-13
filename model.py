@@ -22,14 +22,17 @@ class CloudSentimentModel(nn.Module):
         self.fc_he = nn.Sequential(nn.Linear(input_size, 1), nn.Softplus())
 
         # 分类器
-        self.classifier = nn.Sequential(
-            nn.Linear(cloud_drop_num, features[0]),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(features[0], features[1]),
-            nn.ReLU(),
-            nn.Linear(features[1], 2)
-        )
+        self.classifier = nn.Sequential()
+        input_dim = cloud_drop_num
+
+        for i, feature_dim in enumerate(features[:-1]):
+            self.classifier.add_module(f'linear_{i}', nn.Linear(input_dim, feature_dim))
+            self.classifier.add_module(f'relu_{i}', nn.ReLU())
+            if dropout > 0:
+                self.classifier.add_module(f'dropout_{i}', nn.Dropout(dropout))
+            input_dim = feature_dim
+
+        self.classifier.add_module('output', nn.Linear(input_dim, 2))
 
     def forward(self, features):
         ex = self.fc_ex(features).squeeze(1)  # [B]
