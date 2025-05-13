@@ -38,6 +38,7 @@ train:
 
 model:
   cloud_drop_num: 512       # number of cloud drops
+  cloud_dim: 1              # dimension of cloud drops
   features:                 # features in classifier
   - 128
   - 64

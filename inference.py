@@ -49,6 +49,7 @@ def load_models(model_path) -> tuple:
     model = CloudSentimentModel(
         input_size=hidden_size,
         cloud_drop_num=config.model.cloud_drop_num,
+        cloud_dim=config.model.get("cloud_dim", 1),
         features=config.model.features,
         dropout=config.model.dropout
     )
