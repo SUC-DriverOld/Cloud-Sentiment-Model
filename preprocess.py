@@ -20,8 +20,13 @@ class TextDataset(Dataset):
         return len(self.texts)
 
     def __getitem__(self, idx):
+        # 确保文本是字符串类型
+        text = self.texts[idx]
+        if not isinstance(text, str):
+            text = "" if text is None else str(text)
+
         encoded = self.tokenizer(
-            self.texts[idx],
+            text,
             padding=self.padding,
             truncation=self.truncation,
             max_length=self.max_length,
@@ -48,6 +53,20 @@ def extract_bert_features(config):
             print(f"[WARNING] Unsupported file format: {file}. Only .tsv and .csv are supported.")
 
     print(f"Total samples: {len(texts)}")
+
+    valid_samples = []
+    for i, (text, label) in enumerate(zip(texts, labels)):
+        if text is not None:  # 过滤None值
+            if not isinstance(text, str):
+                text = str(text)  # 转换非字符串为字符串
+            valid_samples.append((text, label))
+
+    if len(valid_samples) < len(texts):
+        print(f"Filtered out {len(texts) - len(valid_samples)} invalid samples.")
+        texts, labels = zip(*valid_samples)
+        texts, labels = list(texts), list(labels)
+
+    print(f"Valid samples: {len(texts)}")
 
     if config.data.train_ratio < 1.0:
         combined = list(zip(texts, labels))
@@ -96,32 +115,59 @@ def extract_bert_features(config):
     os.makedirs(output_dir, exist_ok=True)
 
     train_features = []
-    val_features = []
+    train_processed_indices = []
     with torch.no_grad():
-        for batch, _ in tqdm(train_loader, desc="Extracting train features"):
+        for batch, indices in tqdm(train_loader, desc="Extracting train features"):
             input_ids = batch["input_ids"].cuda()
             attention_mask = batch["attention_mask"].cuda()
-            outputs = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]
-            train_features.append(outputs.cpu())
+            try:
+                outputs = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]
+                train_features.append(outputs.cpu())
+                train_processed_indices.extend(indices.tolist())
+            except Exception as e:
+                print(f"Error processing batch: {e}")
+                continue
 
-        for batch, _ in tqdm(val_loader, desc="Extracting val features"):
-            input_ids = batch["input_ids"].cuda()
-            attention_mask = batch["attention_mask"].cuda()
-            outputs = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]
-            val_features.append(outputs.cpu())
-
+    if len(train_processed_indices) < len(X_train):
+        print(f"Warning: Only processed {len(train_processed_indices)} out of {len(X_train)} training samples")
+        # 只保留成功处理的样本标签
+        y_train_filtered = [y_train[i] for i in train_processed_indices]
+    else:
+        y_train_filtered = y_train
+    
     train_features = torch.cat(train_features, dim=0)
     torch.save({
         "features": train_features,
-        "labels": torch.tensor(y_train, dtype=torch.long)
+        "labels": torch.tensor(y_train_filtered, dtype=torch.long)
     }, os.path.join(output_dir, "train_features.pt"))
 
     print(f"Saving train features to: {os.path.join(output_dir, 'train_features.pt')}")
 
+    val_features = []
+    val_processed_indices = []
+    with torch.no_grad():
+        for batch, indices in tqdm(val_loader, desc="Extracting val features"):
+            input_ids = batch["input_ids"].cuda()
+            attention_mask = batch["attention_mask"].cuda()
+            try:
+                outputs = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]
+                val_features.append(outputs.cpu())
+                val_processed_indices.extend(indices.tolist())
+            except Exception as e:
+                print(f"Error processing batch: {e}")
+                continue
+
+    if len(val_processed_indices) < len(X_val):
+        print(f"Warning: Only processed {len(val_processed_indices)} out of {len(X_val)} validation samples")
+        # 只保留成功处理的样本标签
+        y_val_filtered = [y_val[i] for i in val_processed_indices]
+    else:
+        y_val_filtered = y_val
+
     val_features = torch.cat(val_features, dim=0)
     torch.save({
         "features": val_features,
-        "labels": torch.tensor(y_val, dtype=torch.long)
+        "labels": torch.tensor(y_val_filtered, dtype=torch.long)
     }, os.path.join(output_dir, "val_features.pt"))
 
     print(f"Saving val features to: {os.path.join(output_dir, 'val_features.pt')}")
