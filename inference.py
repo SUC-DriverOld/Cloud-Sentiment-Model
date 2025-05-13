@@ -27,7 +27,7 @@ def predict_single(model: CloudSentimentModel, features) -> bool:
         logits, ex, en, he = model(features)
         pred = torch.argmax(logits, dim=1).item()
         # 计算不确定性指标
-        uncertainty = en.item() + he.item()
+        uncertainty = (en.mean() + he.mean()).item()
     return pred, uncertainty
 
 
