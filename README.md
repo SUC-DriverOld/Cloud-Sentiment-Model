@@ -12,8 +12,8 @@
 1. 克隆仓库并安装依赖，推荐使用 python3.10
 
 ```bash
-git clone url/to/repo
-cd dir/to/repo
+git clone https://github.com/SUC-DriverOld/Cloud-Sentiment-Model
+cd Cloud-Sentiment-Model
 conda create -n csm python=3.10 -y
 conda activate csm
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
@@ -37,8 +37,9 @@ pretrain
 
 ## 数据集制作&修改配置文件
 
-1. 你可以使用多个 `.csv` 或 `.tsv` 文件作为数据集。将他们存放到同一个文件夹下，然后在配置文件 `configs/config.yaml` 中修改 `data.path` 为你的数据集存放路径即可。
-2. 你的 `.csv` 或 `.tsv` 格式的数据集必须是以下面的格式（以csv为例），其中 `label` 列的值必须是 `0` 或 `1`，表示消极或积极情感。`text` 列的值是训练文本。
+1. 数据集可以从 [ChineseNlpCorpus](https://github.com/SophonPlus/ChineseNlpCorpus) 获取。
+2. 可以使用多个 `.csv` 或 `.tsv` 文件作为数据集。将他们存放到同一个文件夹下，然后在配置文件 `configs/config.yaml` 中修改 `data.path` 为你的数据集存放路径即可。
+3. 数据集必须是以下面的格式（以csv为例），其中 `label` 列的值必须是 `0` 或 `1`，表示消极或积极情感。`text` 列的值是训练文本。其余列可有可无，不影响训练。
 
 ```csv
 label,text

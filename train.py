@@ -158,7 +158,7 @@ def train(config, model_path=None):
     logger = TensorBoardLogger(
         name="logs",
         save_dir=os.path.join(config.exp_dir, config.exp_name),
-        version=config.exp_name,
+        version=config.exp_version,
     )
 
     strategy = "auto"

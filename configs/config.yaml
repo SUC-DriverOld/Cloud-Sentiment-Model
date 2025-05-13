@@ -1,42 +1,43 @@
-exp_dir: "models"
-exp_name: "my_model"
-seed: 114514
+exp_dir: "models"           # path to save the model
+exp_name: "my_model"        # name of the experiment
+exp_version: "1.0"          # version of the experiment
+seed: 114514                # random seed for reproducibility
 
 preprocess:
-  batch_size: 6
-  num_workers: 4
-  padding: "max_length"
-  truncation: true
-  max_length: 256
-  return_tensors: "pt"
+  batch_size: 6             # batch size for preprocessing
+  num_workers: 4            # number of workers for preprocessing
+  padding: "max_length"     # padding strategy
+  truncation: true          # whether to truncate sequences
+  max_length: 256           # maximum length of sequences
+  return_tensors: "pt"      # return tensors in pytorch format
 
 data:
-  path: "datasets"
-  val_size: 0.1
-  train_ratio: 1.0
-  num_workers: 4
-  pin_memory: false
-  persistent_workers: true
+  path: "datasets"          # path to the dataset
+  val_size: 0.1             # proportion of the dataset to use for validation
+  train_ratio: 1.0          # proportion of the dataset to use for training
+  num_workers: 4            # number of workers for data loading
+  pin_memory: false         # whether to pin memory for faster data transfer
+  persistent_workers: true  # whether to keep workers alive after data loading
 
 train:
-  devices: [0]
-  batch_size: 64
-  lr: 1e-4
-  lr_decay: 0.95
-  weight_decay: 0.01
-  max_epochs: 1000
-  gamma: 2
-  monitor: "val_acc"
-  save_name: "{epoch}_{val_acc:.4f}"
-  save_top_k: 5
-  mode: "max"
-  save_last: true
-  verbose: true
-  log_every_n_steps: 10
+  devices: [0]              # list of devices to use for training
+  batch_size: 64            # batch size for training
+  lr: 1e-4                  # learning rate
+  lr_decay: 0.95            # learning rate decay
+  weight_decay: 0.01        # weight decay
+  max_epochs: 200           # maximum number of epochs
+  gamma: 2                  # gamma for focal loss
+  monitor: "val_acc"        # metric to monitor for early stopping
+  save_name: "{epoch}_{val_acc:.4f}" # name of the saved model
+  save_top_k: 5             # number of top models to save
+  mode: "max"               # monitor mode
+  save_last: true           # whether to save the last model
+  verbose: true             # whether to print training progress
+  log_every_n_steps: 10     # log every n steps
 
 model:
-  cloud_drop_num: 512
-  features:
+  cloud_drop_num: 512       # number of cloud drops
+  features:                 # features in classifier
   - 128
   - 64
-  dropout: 0.3
+  dropout: 0.3              # dropout rate
