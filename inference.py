@@ -21,14 +21,14 @@ def extract_bert_features(config, text, tokenizer, bert_model, max_length=128, d
     return features
 
 
-def predict_single(model: CloudSentimentModel, features) -> bool:
+def predict_single(model: CloudSentimentModel, features):
     model.eval()
     with torch.no_grad():
-        logits, ex, en, he = model(features)
+        logits, _, _, _ = model(features)
         pred = torch.argmax(logits, dim=1).item()
-        # 计算不确定性指标
-        uncertainty = (en.mean() + he.mean()).item()
-    return pred, uncertainty
+        probs = torch.softmax(logits, dim=1)
+        uncertainty = 1.0 - probs.max(dim=1).values.item()
+        return pred, uncertainty
 
 
 def load_models(model_path) -> tuple:
