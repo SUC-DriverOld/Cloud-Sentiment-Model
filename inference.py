@@ -51,7 +51,8 @@ def load_models(model_path) -> tuple:
         cloud_drop_num=config.model.cloud_drop_num,
         cloud_dim=config.model.get("cloud_dim", 1),
         features=config.model.features,
-        dropout=config.model.dropout
+        dropout=config.model.get("dropout", 0.2),
+        attention=config.model.get("attention", False),
     )
     model.load_state_dict(state_dict)
 
@@ -87,7 +88,8 @@ if __name__ == "__main__":
             model.to(device)
             while True:
                 text = input(">>> ")
-                pred, uncertainty = predict(model, tokenizer, bert_model, config, text, args.max_length, device)
-                print(f"Prediction: {'Positive' if pred else 'Negative'}, Uncertainty: {uncertainty}")
+                if text:
+                    pred, uncertainty = predict(model, tokenizer, bert_model, config, text, args.max_length, device)
+                    print(f"Prediction: {'Positive' if pred else 'Negative'}, Uncertainty: {uncertainty}")
         except KeyboardInterrupt:
             os._exit(0)

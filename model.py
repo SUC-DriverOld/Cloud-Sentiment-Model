@@ -11,12 +11,14 @@ class CloudSentimentModel(nn.Module):
         cloud_dim: int = 1,  # 云模型维度
         features: list[int] = [128, 64],  # 分类器隐藏层维度
         dropout: float = 0.2,  # Dropout率
+        attention: bool = False,  # 是否使用attention
     ):
         super(CloudSentimentModel, self).__init__()
         self.cloud_drop_num = cloud_drop_num
         self.cloud_dim = cloud_dim
         self.dropout = dropout
         self.features = features
+        self.attention = attention
 
         self.fc_ex = nn.Linear(input_size, cloud_dim)  # [B, cloud_dim]
         self.fc_en = nn.Sequential(
@@ -27,6 +29,11 @@ class CloudSentimentModel(nn.Module):
             nn.Linear(input_size, cloud_dim), 
             nn.Softplus()
         )  # [B, cloud_dim]
+
+        if self.attention:
+            self.attn_q = nn.Linear(cloud_dim, cloud_dim)
+            self.attn_k = nn.Linear(cloud_dim, cloud_dim)
+            self.attn_v = nn.Linear(cloud_dim, cloud_dim)
 
         self.classifier = nn.Sequential()
         input_dim = cloud_drop_num * cloud_dim
@@ -54,14 +61,26 @@ class CloudSentimentModel(nn.Module):
         noise1 = torch.randn(B, D, C).to(device)  # [B, D, C]
         noise2 = torch.randn(B, D, C).to(device)  # [B, D, C]
 
-        # 广播机制
+        # 云模型
         drops = ex.unsqueeze(1) + (en.unsqueeze(1) + he.unsqueeze(1) * noise1) * noise2  # [B, D, C]
 
         # 多维度隶属度
         mu = torch.exp(
             -((drops - ex.unsqueeze(1)) ** 2) / 
-            (2 * (en.unsqueeze(1) ** 2 + 1e-6))
+            (2 * (en.unsqueeze(1) ** 2 + 1e-6)) # 防止除0错误
         )  # [B, D, C]
+
+        if self.attention:
+            # Q, K, V: [B, D, C]
+            Q = self.attn_q(mu)
+            K = self.attn_k(mu)
+            V = self.attn_v(mu)
+            # (B, num_heads, seq_len, head_dim)
+            Q = Q.unsqueeze(1)  # [B, 1, D, C]
+            K = K.unsqueeze(1)  # [B, 1, D, C]
+            V = V.unsqueeze(1)  # [B, 1, D, C]
+            attn_out = F.scaled_dot_product_attention(Q, K, V)  # [B, 1, D, C]
+            mu = attn_out.squeeze(1)  # [B, D, C]
 
         # 展平结果
         mu_flat = mu.view(B, -1)  # [B, D*C]

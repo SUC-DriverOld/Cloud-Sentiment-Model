@@ -135,6 +135,7 @@ def train(config, model_path=None):
         cloud_dim=config.model.cloud_dim,
         features=config.model.features,
         dropout=config.model.dropout,
+        attention=config.model.attention
     )
 
     lightning_model = CloudSentimentModelLightning(

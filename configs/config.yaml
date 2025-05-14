@@ -39,6 +39,7 @@ train:
 model:
   cloud_drop_num: 512       # number of cloud drops
   cloud_dim: 16             # dimension of cloud drops
+  attention: false          # whether to use attention
   features:                 # features in classifier
   - 256
   - 64
