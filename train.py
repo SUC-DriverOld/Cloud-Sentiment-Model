@@ -43,24 +43,34 @@ class CloudSentimentModelLightning(LightningModule):
 
     def training_step(self, batch, batch_idx):
         features, labels = batch
-        logits, _, _, _ = self(features)
+        logits, mu = self(features)
         loss = self.loss_fn(logits, labels)
-        self.log("train_loss", loss, prog_bar=True, logger=True)
+        train_acc = accuracy_score(labels.cpu(), torch.argmax(logits, dim=1).cpu())
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
+
         self.log("lr", current_lr, prog_bar=True, logger=True)
+        self.log("train/loss", loss, prog_bar=False, logger=True)
+        self.log("train/acc", train_acc, prog_bar=False, logger=True)
+        self.log("train/mu_mean", mu.mean(), prog_bar=False, logger=True)
+        self.log("train/mu_std", mu.std(), prog_bar=False, logger=True)
+
         return loss
 
     def validation_step(self, batch, batch_idx):
         features, labels = batch
-        logits, _, _, _ = self(features)
+        logits, mu = self(features)
         loss = self.loss_fn(logits, labels)
         preds = torch.argmax(logits, dim=1)
         acc = accuracy_score(labels.cpu(), preds.cpu())
-        self.log("val_loss", loss, prog_bar=True, logger=True, rank_zero_only=True)
+
         self.log("val_acc", acc, prog_bar=True, logger=True, rank_zero_only=True)
+        self.log("val/loss", loss, prog_bar=True, logger=True, rank_zero_only=True)
+        self.log("val/mu_mean", mu.mean(), prog_bar=False, logger=True)
+        self.log("val/mu_std", mu.std(), prog_bar=False, logger=True)
+        
 
     def configure_optimizers(self):
-        optimizer = AdamW(self.parameters(),lr=self.lr,weight_decay=self.weight_decay)
+        optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         scheduler = ExponentialLR(optimizer, gamma=self.lr_decay)
         return {"optimizer": optimizer,"lr_scheduler": {"scheduler": scheduler,"interval": "epoch","frequency": 1}}
 

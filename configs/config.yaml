@@ -39,7 +39,7 @@ train:
   mode: "max"               # monitor mode
   save_last: true           # whether to save the last model
   verbose: true             # whether to print training progress
-  log_every_n_steps: 10     # log every n steps
+  log_every_n_steps: 100    # log every n steps
 
 model:
   cloud_drop_num: 512       # number of cloud drops

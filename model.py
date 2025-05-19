@@ -87,7 +87,7 @@ class CloudSentimentModel(nn.Module):
         # 展平结果
         mu_flat = mu.view(B, -1)  # [B, D*C]
 
-        return self.classifier(mu_flat), ex, en, he
+        return self.classifier(mu_flat), mu
 
 
 class FocalLoss(nn.Module):

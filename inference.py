@@ -25,7 +25,7 @@ def extract_bert_features(config, text, tokenizer, bert_model, max_length=128, d
 def predict_single(model: CloudSentimentModel, features):
     model.eval()
     with torch.no_grad():
-        logits, _, _, _ = model(features)
+        logits, _ = model(features)
         pred = torch.argmax(logits, dim=1).item()
         probs = torch.softmax(logits, dim=1)
         uncertainty = 1.0 - probs.max(dim=1).values.item()
