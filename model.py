@@ -12,6 +12,7 @@ class CloudSentimentModel(nn.Module):
         features: list[int] = [128, 64],  # 分类器隐藏层维度
         dropout: float = 0.2,  # Dropout率
         attention: bool = False,  # 是否使用attention
+        output_feature: int = 2,  # 输出类别数
     ):
         super(CloudSentimentModel, self).__init__()
         self.cloud_drop_num = cloud_drop_num
@@ -19,6 +20,7 @@ class CloudSentimentModel(nn.Module):
         self.dropout = dropout
         self.features = features
         self.attention = attention
+        self.output_feature = output_feature
 
         self.fc_ex = nn.Linear(input_size, cloud_dim)  # [B, cloud_dim]
         self.fc_en = nn.Sequential(
@@ -45,7 +47,7 @@ class CloudSentimentModel(nn.Module):
                 self.classifier.add_module(f'dropout_{i}', nn.Dropout(dropout))
             input_dim = feature_dim
 
-        self.classifier.add_module('output', nn.Linear(input_dim, 2))
+        self.classifier.add_module('output', nn.Linear(input_dim, self.output_feature))
 
     def forward(self, features):
         ex = self.fc_ex(features)  # [B, cloud_dim]

@@ -20,10 +20,10 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 pip install -r requirements.txt
 ```
 
-2. 从 Huggingface 下载预训练的BERT模型 [chinese-roberta-wwm-ext-large](https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/tree/main)，按照下面的文件夹结构放置到 `pretrain` 文件夹下。只需要下载以下文件即可，其余文件不必下载。
+2. 从 Huggingface 下载预训练的BERT模型 [chinese-roberta-wwm-ext-large](https://huggingface.co/hfl/chinese-roberta-wwm-ext-large/tree/main)，按照下面的文件夹结构放置到 `pretrain` 文件夹下。只需要下载以下文件即可，其余文件不必下载。如果想要使用其他 bert 预训练模型，可以修改配置文件中的 `bert` 参数。
 
 ```bash
-# 在pretrain文件夹下需要新建文件夹chinese-roberta-wwm-ext-large
+# 以chinese-roberta-wwm-ext-large为例，在pretrain文件夹下需要新建文件夹chinese-roberta-wwm-ext-large
 pretrain
     └─chinese-roberta-wwm-ext-large
         │-─ added_tokens.json
@@ -33,24 +33,51 @@ pretrain
         │-─ tokenizer.json
         │-─ tokenizer_config.json
         └-─ vocab.txt
+
+# 对应的配置文件
+bert:
+  download: false           # 是否下载预训练模型，如果手动下载了，可以设置为false
+  cache_dir: "pretrain"     # 自动下载的预训练模型存放路径
+  model: "pretrain/chinese-roberta-wwm-ext-large" # 手动加载的模型路径，或者自动模型的Huggingface仓库地址
 ```
 
 ## 数据集制作&修改配置文件
 
 1. 数据集可以从 [ChineseNlpCorpus](https://github.com/SophonPlus/ChineseNlpCorpus) 获取。
 2. 可以使用多个 `.csv` 或 `.tsv` 文件作为数据集。将他们存放到同一个文件夹下，然后在配置文件 `configs/config.yaml` 中修改 `data.path` 为你的数据集存放路径即可。
-3. 数据集必须是以下面的格式（以csv为例），其中 `label` 列的值必须是 `0` 或 `1`，表示消极或积极情感。`text` 列的值是训练文本。其余列可有可无，不影响训练。
+3. 数据集必须是以下面的格式（以csv为例），其中 `label` 列表示标注，每个标注对应的情感在配置文件 `model.labels` 中定义，`text` 列的值是训练文本。其余列可有可无，不影响训练。
 
-```csv
+```bash
+# 例如以下csv格式的数据集
 label,text
 1,帅的呀，就是越来越爱你！[爱你][爱你][爱你]
 1,美~~~~~[爱你]
 1,梦想有多大，舞台就有多大![鼓掌]
 0,写点儿字容易吗？降税降税[怒骂]
 0,可惜啊！它们不是我的啊！[泪][泪]800000啊
+
+# 以及配置文件model.labels的值
+labels:
+  0: "Negative"
+  1: "Positive"
 ```
 
-3. 按需修改配置文件，配置文件位于 `configs/config.yaml`
+3. 按需修改配置文件，配置文件位于 `configs/config.yaml`，有关 `models` 的参数说明如下：
+
+```yaml
+model:
+  cloud_drop_num: 512       # 云模型云滴数量
+  cloud_dim: 16             # 模型维度大小
+  attention: false          # 是否使用attention
+  labels:                   # 情感标签，可扩充，必须和训练数据中的label列对应
+    0: "Negative"
+    1: "Positive"
+  features:                 # 分类器隐藏层维度，可扩充
+  - 256                     # 第一个值需要小于cloud_drop_num * cloud_dim
+  - 64
+  - 16                      # 最后一个值需要大于标签数量
+  dropout: 0.2              # 分类器的dropout率
+```
 
 ## 训练
 
@@ -78,8 +105,7 @@ python inference.py -m path/to/last/model.ckpt -t 你好呀，今天天气真好
 # 输出结果
 Loading tokenizer and model...
 [Input]: 你好呀，今天天气真好！
-[Prediction]: Positive
-[Uncertainty]: 0.2147147823125124
+[Prediction]: Positive, [Uncertainty]: 0.2147147823125124
 ```
 
 2. 对话类的交互推理，使用下面的命令，其中 `-m` 传入训练好的模型。不需要输入文本。如果想退出聊天，按下 `Ctrl+C` 即可。
@@ -96,6 +122,7 @@ Prediction: Negative, Uncertainty: 0.08376982249319553
 ```
 
 3. 若需要指定最大推理文本长度，可以传入参数 `--max_length`，默认为128。
+4. 若想要使用自定义配置文件，而不使用模型内置的配置文件，可以传入参数 `-c` 指定配置文件路径。但需要注意配置文件需要和模型匹配，否则会报错。
 
 ## 参考
 

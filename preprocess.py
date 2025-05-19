@@ -84,10 +84,13 @@ def extract_bert_features(config):
     print("Loading tokenizer and bert model...")
 
     # 加载BERT tokenizer和模型
-    assert os.path.exists("pretrain/chinese-roberta-wwm-ext-large/pytorch_model.bin"), "Please download the pre-trained model first."
-
-    tokenizer = BertTokenizer.from_pretrained("pretrain/chinese-roberta-wwm-ext-large")
-    bert_model = BertModel.from_pretrained("pretrain/chinese-roberta-wwm-ext-large")
+    if config.bert.download:
+        tokenizer = BertTokenizer.from_pretrained(config.bert.model, cache_dir=config.bert.cache_dir)
+        bert_model = BertModel.from_pretrained(config.bert.model, cache_dir=config.bert.cache_dir)
+    else:
+        assert os.path.exists(config.bert.model), f"Model path does not exist: {config.bert.model}"
+        tokenizer = BertTokenizer.from_pretrained(config.bert.model)
+        bert_model = BertModel.from_pretrained(config.bert.model)
     bert_model.eval().cuda()
 
     # 创建数据集和加载器

@@ -3,6 +3,11 @@ exp_name: "test"            # name of the experiment
 exp_version: "1.0"          # version of the experiment
 seed: 114514                # random seed for reproducibility
 
+bert:
+  download: false           # whether to download the model
+  cache_dir: "pretrain"     # path to save the cache, if download is true
+  model: "pretrain/chinese-roberta-wwm-ext-large" # path to the pre-trained model or huggingface model name
+
 preprocess:
   batch_size: 6             # batch size for preprocessing
   num_workers: 4            # number of workers for preprocessing
@@ -40,7 +45,10 @@ model:
   cloud_drop_num: 512       # number of cloud drops
   cloud_dim: 16             # dimension of cloud drops
   attention: false          # whether to use attention
-  features:                 # features in classifier
-  - 256
-  - 64
+  labels:                   # classifier output labels
+    0: "Negative"
+    1: "Positive"
+  features:                 # hidden dimensions in classifier
+  - 256                     # the first value should be smaller than cloud_drop_num
+  - 64                      # the last value should be larger than len(output)
   dropout: 0.2              # dropout rate
