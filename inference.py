@@ -41,7 +41,7 @@ def load_models(model_path, custom_config=None) -> tuple:
         config = OmegaConf.load(custom_config)
     else:
         config = checkpoint["config"]
-    hidden_size = config["model"]["hidden_size"]
+    hidden_size = checkpoint["config"]["model"]["hidden_size"]
 
     print("Loading tokenizer and model...")
     try:
